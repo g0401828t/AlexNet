@@ -20,7 +20,7 @@ from plotgraph import plotgraph
 
 ### parameters
 model_name = "AlexNet"
-lr = 1e-4
+lr = 1e-5
 momentum = 0 # 0.9
 weight_dacay = 0 # 0.0005
 batch_size = 256
