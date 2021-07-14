@@ -20,15 +20,17 @@ from plotgraph import plotgraph
 
 ### parameters
 model_name = "AlexNet"
-lr = 1e-5
-momentum = 0 # 0.9
-weight_dacay = 0 # 0.0005
-batch_size = 256
-epochs = 100
-path = "D:/projects"
+lr = 1e-4
+# momentum = 0 # 0.9
+# weight_dacay = 0 # 0.0005
+batch_size = 256 #32
+epochs = 1000
+earlystop = 7  # for early stopping
+# path = "D:/projects"
+path = os.path.dirname(os.getcwd()) # "D:/projects"
 datapath = path + '/dataset'
 resultpath = path + "/" + model_name + "/results"
-modelpath = path + "/" + model_name + "/models/" + model_name + "_best_model.h"
+modelpath = path + "/" + model_name + "/models"
 if not os.path.exists(resultpath):
     os.mkdir(resultpath)
 if not os.path.exists(modelpath):
@@ -89,7 +91,7 @@ for train_index, val_index in sss.split(indices, y_train0):
 from torch.utils.data import Subset
 val_set = Subset(train_set, val_index)
 train_set = Subset(train_set, train_index)
-print(len(train_set), len(val_set))
+# print(len(train_set), len(val_set))
 # count the number of images per calss in train_set and val_set
 # import collections
 # y_train = [y for _, y in train_set]
@@ -115,11 +117,11 @@ val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
 
 
 ### bring model from model.py
-model = AlexNet()
+model = AlexNet(num_classes=10)
 # model to cuda if available
 model.to(device)
 # print("model set to",next(model.parameters()).device)
-# check model summary
+# # check model summary
 # summary(model, input_size=(3, 227, 227))
 
 
@@ -127,17 +129,18 @@ model.to(device)
 criterion = nn.CrossEntropyLoss().to(device)
 optimizer = optim.Adam(model.parameters(), lr = lr)
 # optimizer = optim.SGD(model.parameters(), lr = lr, momentum=momentum, weight_decay=weight_dacay)
-lr_sche = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.5)
+# lr_scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.9)
+lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", patience=5, factor=0.5)
 
 ### training function with validation per epoch
 def train():
     loss_list, valloss_list, valacc_list = [], [], []  # for ploting graph
-    es = 5  # for early stopping
+    best_acc = 0
     for epoch in range(epochs):
-        print("learning_rate:", lr)
+        for param_group in optimizer.param_groups:
+            current_lr =  param_group['lr']
         model.train()
-        avg_loss, val_loss = 0, 0
-        best_acc = 0
+        avg_loss, val_loss, val_acc = 0, 0, 0
         for i, (x, y) in enumerate(train_loader):
             x, y = x.to(device), y.to(device)
             
@@ -151,8 +154,7 @@ def train():
             loss.backward()
             optimizer.step()
 
-            avg_loss += loss
-        avg_loss = avg_loss/len(train_loader)  # calculate average loss per epoch
+            avg_loss += loss/len(train_set)  # calculate average loss per epoch
 
         ### validation
         model.eval()
@@ -161,30 +163,40 @@ def train():
                 x, y = x.to(device), y.to(device)
 
                 prediction = model(x)
-                # calculate validation Loss
-                val_loss += criterion(prediction, y) / len(val_loader)
-                # calculate validation Accuracy
-                correct = prediction.max(1)[1] == y
-                val_acc = correct.float().mean()
 
-                # Early Stop
-                if val_acc > best_acc:
-                    best_acc = val_acc
-                    es = 5
-                    torch.save(model.state_dict(), modelpath)
-                else: 
-                    es -= 1
-                if es == 0: 
-                    model.load_state_dict(torch.load(modelpath))
-                    break
-            
-            # for plotting graph
-            loss_list.append(avg_loss.item())
-            valloss_list.append(val_loss.item())
-            valacc_list.append(val_acc.item())
-        print(datetime.now().time().replace(microsecond=0), "EPOCHS: [{}/{}], avg_loss: [{:.4f}], val_acc: [{:.2f}%]".format(
-                epoch+1, epochs, avg_loss.item(), val_acc.item()*100))
+                # calculate validation Loss
+                val_loss += criterion(prediction, y) / len(val_set)
+
+                # calculate validation Accuracy
+                val_acc += (prediction.max(1)[1] == y).sum().item() * 100 / len(val_set)
+
+        # print loss, acc
+        print(datetime.now().time().replace(microsecond=0), "EPOCHS: [{}], current_lr: [{}], avg_loss: [{:.4f}], val_loss: [{:.4f}], val_acc: [{:.2f}%]".format(
+                epoch+1, current_lr, avg_loss.item(), val_loss.item(), val_acc))
+
+        # append list and plot graph
+        loss_list.append(avg_loss.item())
+        valloss_list.append(val_loss.item())
+        valacc_list.append(val_acc)
         plotgraph(loss_list=loss_list, valloss_list=valloss_list, valacc_list=valacc_list, path = resultpath)
+
+        # Early Stop
+        if val_acc > best_acc:
+            best_acc = val_acc
+            es = earlystop
+            torch.save(model.state_dict(), modelpath + "/" + model_name + "_best_model.h")
+        else: 
+            es -= 1
+        if es == 0: 
+            # model.load_state_dict(torch.load(modelpath + "/" + model_name + "_best_model.h"))
+            print("Early Stopped and saved model")
+            break
+
+        # learning rate scheduler
+        # lr_scheduler.step()
+        lr_scheduler.step(val_loss)
+
+    print("finished training")
 
 # train
 print("start training")

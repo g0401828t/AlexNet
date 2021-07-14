@@ -1,8 +1,7 @@
 import torch.nn as nn
-import torch.nn.functional as F
 
 class AlexNet(nn.Module):
-    def __init__(self, num_classes=20):
+    def __init__(self, num_classes=10):
         super(AlexNet, self).__init__()
         self.feature_extractor = nn.Sequential(
             nn.Conv2d(3, 96, kernel_size=11, stride=4, padding=0), # (b x 96 x 55 x 55)

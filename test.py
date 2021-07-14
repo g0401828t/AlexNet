@@ -5,13 +5,19 @@ from torch.utils.data import DataLoader
 
 from model import AlexNet
 
+import os
+import argparse
 
+parser = argparse.ArgumentParser(description="parameters")
+parser.add_argument("--model", default="Alexnet_best_model.h")
+args = parser.parse_args()
 
 ### parameters
 model_name = "AlexNet"
-path = "D:/projects"
+# path = "D:/projects"
+path = os.path.dirname(os.getcwd()) # "D:/projects"
 datapath = path + '/dataset'
-modelpath = path + "/" + model_name + "/models/" + model_name + "_best_model.h"
+modelpath = path + "/" + model_name + "/models/" + args.model
 batch_size = 32
 
 ### 사용 가능한 gpu 확인 및 설정
@@ -56,7 +62,7 @@ model.to(device)
 def test():
     model.load_state_dict(torch.load(modelpath))
     model.eval()
-    avg_loss = 0
+    test_acc = 0
     with torch.no_grad():
         correct = 0
         total = 0
@@ -65,10 +71,10 @@ def test():
 
             # 순전파
             prediction = model(x)
-            correct = prediction.max(1)[1] == y
-            test_acc = correct.float().mean()
+            test_acc += (prediction.max(1)[1] == y).sum().item() * 100 / len(test_set)
+
     print("Acc: [{:.2f}%]".format(
-        test_acc*100
+        test_acc
     ))
 
 
